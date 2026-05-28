@@ -46,6 +46,8 @@ function MediaDetails() {
   const [formFavorite, setFormFavorite] = useState(false);
   const [formMediaType, setFormMediaType] = useState<MediaType>('short_drama');
   const [formTitle, setFormTitle] = useState('');
+  const [formPosterPath, setFormPosterPath] = useState('');
+  const [formBackdropPath, setFormBackdropPath] = useState('');
 
   const [showTmdbUpdate, setShowTmdbUpdate] = useState(false);
   const [tmdbSearchQuery, setTmdbSearchQuery] = useState('');
@@ -77,6 +79,8 @@ function MediaDetails() {
             setFormDate(item.watchedDate);
             setFormFavorite(item.favorite);
             setFormMediaType(item.mediaType);
+            setFormPosterPath(item.posterPath || '');
+            setFormBackdropPath(item.backdropPath || '');
           }
           const numId = item?.tmdbId || parseInt(id);
           if (numId && !isNaN(numId)) {
@@ -157,8 +161,8 @@ function MediaDetails() {
       tmdbId: savedItem?.tmdbId || (tmdbId ? parseInt(tmdbId) : 0),
       mediaType: formMediaType,
       title: formTitle || getDisplayTitle(),
-      posterPath: savedItem?.posterPath || (tmdbMovie?.poster_path || tmdbTv?.poster_path || (posterParam ? decodeURIComponent(posterParam) : null)),
-      backdropPath: savedItem?.backdropPath || (tmdbMovie?.backdrop_path || tmdbTv?.backdrop_path || (backdropParam ? decodeURIComponent(backdropParam) : null)),
+      posterPath: formPosterPath || savedItem?.posterPath || (tmdbMovie?.poster_path || tmdbTv?.poster_path || (posterParam ? decodeURIComponent(posterParam) : null)),
+      backdropPath: formBackdropPath || savedItem?.backdropPath || (tmdbMovie?.backdrop_path || tmdbTv?.backdrop_path || (backdropParam ? decodeURIComponent(backdropParam) : null)),
       releaseYear: getDisplayYear(),
       addedAt: savedItem?.addedAt || Date.now(),
       episodeNumber: formEpisode,
@@ -194,13 +198,14 @@ function MediaDetails() {
     }
   };
 
-  const handleTmdbSearch = async () => {
-    if (!tmdbSearchQuery.trim()) return;
+  const handleTmdbSearch = async (query?: string) => {
+    const searchQuery = query || tmdbSearchQuery;
+    if (!searchQuery.trim()) return;
     setIsSearchingTmdb(true);
     try {
       const [movies, tvShows] = await Promise.all([
-        searchMovies(tmdbSearchQuery),
-        searchTvShows(tmdbSearchQuery),
+        searchMovies(searchQuery),
+        searchTvShows(searchQuery),
       ]);
       setTmdbSearchResults({ movies, tvShows });
     } catch {
@@ -223,14 +228,11 @@ function MediaDetails() {
       const updatedItem: SavedMedia = {
         ...savedItem,
         tmdbId: details.id,
-        mediaType: type,
-        title: 'title' in details ? details.title : details.name,
         posterPath: details.poster_path,
         backdropPath: details.backdrop_path,
         releaseYear: 'release_date' in details
           ? (details.release_date ? details.release_date.split('-')[0] : '')
           : (details.first_air_date ? details.first_air_date.split('-')[0] : ''),
-        genres: details.genres.map(g => g.name),
         overview: details.overview,
       };
 
@@ -281,7 +283,14 @@ function MediaDetails() {
             {savedItem && !isEditing && (
               <div className="flex gap-1.5">
                 <button
-                  onClick={() => setShowTmdbUpdate(true)}
+                  onClick={() => {
+                    const searchTitle = savedItem?.title || tmdbMovie?.title || tmdbTv?.name || '';
+                    setTmdbSearchQuery(searchTitle);
+                    setShowTmdbUpdate(true);
+                    if (searchTitle) {
+                      handleTmdbSearch(searchTitle);
+                    }
+                  }}
                   className="w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm flex items-center justify-center hover:bg-black/40 transition-colors active:scale-90"
                   title="更新 TMDB 信息"
                 >
@@ -306,6 +315,8 @@ function MediaDetails() {
                     setFormDate(savedItem.watchedDate);
                     setFormFavorite(savedItem.favorite);
                     setFormMediaType(savedItem.mediaType);
+                    setFormPosterPath(savedItem.posterPath || '');
+                    setFormBackdropPath(savedItem.backdropPath || '');
                     setIsEditing(true);
                   }}
                   className="w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm flex items-center justify-center hover:bg-black/40 transition-colors active:scale-90"
@@ -333,7 +344,14 @@ function MediaDetails() {
           {savedItem && !isEditing && (
             <div className="flex gap-1">
               <button
-                onClick={() => setShowTmdbUpdate(true)}
+                onClick={() => {
+                  const searchTitle = savedItem?.title || tmdbMovie?.title || tmdbTv?.name || '';
+                  setTmdbSearchQuery(searchTitle);
+                  setShowTmdbUpdate(true);
+                  if (searchTitle) {
+                    handleTmdbSearch(searchTitle);
+                  }
+                }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-bg transition-colors active:scale-95"
                 title="更新 TMDB 信息"
               >
@@ -358,6 +376,8 @@ function MediaDetails() {
                   setFormDate(savedItem.watchedDate);
                   setFormFavorite(savedItem.favorite);
                   setFormMediaType(savedItem.mediaType);
+                  setFormPosterPath(savedItem.posterPath || '');
+                  setFormBackdropPath(savedItem.backdropPath || '');
                   setIsEditing(true);
                 }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-bg transition-colors active:scale-95"
@@ -522,6 +542,29 @@ function MediaDetails() {
                 onChange={(e) => setFormTitle(e.target.value)}
                 className="w-full h-9 bg-bg border border-divider/40 rounded-xl px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-text-secondary mb-1.5">封面图片URL</label>
+                <input
+                  type="text"
+                  placeholder="海报图片链接"
+                  value={formPosterPath}
+                  onChange={(e) => setFormPosterPath(e.target.value)}
+                  className="w-full h-9 bg-bg border border-divider/40 rounded-xl px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-text-secondary mb-1.5">背景图片URL</label>
+                <input
+                  type="text"
+                  placeholder="背景图片链接"
+                  value={formBackdropPath}
+                  onChange={(e) => setFormBackdropPath(e.target.value)}
+                  className="w-full h-9 bg-bg border border-divider/40 rounded-xl px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

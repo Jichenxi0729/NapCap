@@ -6,6 +6,8 @@ import { getCurrentUser, signOut } from '../services/authService';
 import { Icons } from '../components/Icon';
 import * as eventBus from '../services/eventBus';
 
+type ViewType = 'list' | 'grid' | 'gallery';
+
 function Profile() {
   const navigate = useNavigate();
   const [items, setItems] = useState<SavedMedia[]>(() => getCachedCollection());
@@ -14,6 +16,10 @@ function Profile() {
   const [gridColumns, setGridColumns] = useState(() => {
     const saved = localStorage.getItem('gridColumns');
     return saved ? parseInt(saved) : 2;
+  });
+  const [viewType, setViewType] = useState<ViewType>(() => {
+    const saved = localStorage.getItem('viewType');
+    return (saved as ViewType) || 'grid';
   });
   const [exporting, setExporting] = useState(false);
 
@@ -39,6 +45,11 @@ function Profile() {
     localStorage.setItem('gridColumns', gridColumns.toString());
     window.dispatchEvent(new Event('gridColumnsChange'));
   }, [gridColumns]);
+
+  useEffect(() => {
+    localStorage.setItem('viewType', viewType);
+    window.dispatchEvent(new Event('viewTypeChange'));
+  }, [viewType]);
 
   const handleLogout = async () => {
     await signOut();
@@ -123,21 +134,67 @@ function Profile() {
 
       {/* 显示设置 */}
       <div className="bg-surface rounded-2xl p-5 shadow-card border border-divider/30">
-        <h3 className="text-sm font-semibold text-text-primary mb-3">显示设置</h3>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-secondary">网格列数</span>
+        <h3 className="text-sm font-semibold text-text-primary mb-4">显示设置</h3>
+        
+        {/* 视图类型 */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-text-secondary">视图类型</span>
+          </div>
+          <div className="flex items-center bg-bg rounded-xl p-1 border border-divider/30">
+            <button
+              onClick={() => setViewType('list')}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-medium transition-all duration-200 ${
+                viewType === 'list'
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Icons.ListVideo size={13} />
+              列表
+            </button>
+            <button
+              onClick={() => setViewType('grid')}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-medium transition-all duration-200 ${
+                viewType === 'grid'
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Icons.Image size={13} />
+              网格
+            </button>
+            <button
+              onClick={() => setViewType('gallery')}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-medium transition-all duration-200 ${
+                viewType === 'gallery'
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Icons.Film size={13} />
+              画廊
+            </button>
+          </div>
+        </div>
+
+        {/* 列数设置 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-text-secondary">显示列数</span>
+          </div>
           <div className="flex items-center bg-bg rounded-full p-0.5 border border-divider/30">
-            {[2, 3, 4].map(num => (
+            {[1, 2, 3, 4, 5, 6].map(num => (
               <button
                 key={num}
                 onClick={() => setGridColumns(num)}
-                className={`w-8 h-8 rounded-full text-xs font-medium transition-all duration-200 ${
+                className={`flex-1 h-9 rounded-full text-xs font-medium transition-all duration-200 ${
                   gridColumns === num
                     ? 'bg-accent text-white shadow-sm'
                     : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
-                {num}
+                {num}列
               </button>
             ))}
           </div>

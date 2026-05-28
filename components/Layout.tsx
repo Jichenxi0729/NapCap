@@ -57,7 +57,7 @@ function Layout() {
       <div className="min-h-screen bg-bg text-text-primary flex flex-col">
         {isHome && (
           <header className="sticky top-0 z-40 bg-bg/80 backdrop-blur-xl border-b border-divider/30">
-            <div className="max-w-6xl mx-auto px-5 py-3">
+            <div className="max-w-[98vw] mx-auto px-2 sm:px-3 py-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center shadow-sm flex-shrink-0">
                   <Icons.Clapperboard size={16} className="text-white" />
@@ -122,7 +122,7 @@ function Layout() {
           </header>
         )}
 
-        <main className={`flex-1 w-full mx-auto ${isDetailPage ? '' : 'max-w-6xl px-5'} ${isHome ? 'py-4' : 'py-0'}`}>
+        <main className={`flex-1 w-full ${isDetailPage ? '' : 'max-w-[98vw] mx-auto px-2 sm:px-3'} ${isHome ? 'py-4' : 'py-0'}`}>
           <Outlet />
         </main>
 

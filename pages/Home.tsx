@@ -8,6 +8,8 @@ import { useSearchContext } from '../components/Layout';
 import * as eventBus from '../services/eventBus';
 import { usePagination } from '../hooks/usePagination';
 
+type ViewType = 'list' | 'grid' | 'gallery';
+
 const TYPE_LABELS: Record<MediaType, string> = {
   movie: '电影',
   tv: '电视剧',
@@ -21,8 +23,16 @@ function Home() {
     const saved = localStorage.getItem('gridColumns');
     return saved ? parseInt(saved) : 2;
   });
+  const [viewType, setViewType] = useState<ViewType>(() => {
+    const saved = localStorage.getItem('viewType');
+    return (saved as ViewType) || 'grid';
+  });
   const { filterText, sortBy } = useSearchContext();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    localStorage.setItem('viewType', viewType);
+  }, [viewType]);
 
   useEffect(() => {
     const loadItems = async () => {
@@ -48,6 +58,15 @@ function Home() {
     };
     window.addEventListener('gridColumnsChange', handler);
     return () => window.removeEventListener('gridColumnsChange', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      const updated = localStorage.getItem('viewType');
+      if (updated) setViewType(updated as ViewType);
+    };
+    window.addEventListener('viewTypeChange', handler);
+    return () => window.removeEventListener('viewTypeChange', handler);
   }, []);
 
   const gradeOrder: Record<string, number> = { 'S+': 7, 'S': 6, 'A+': 5, 'A': 4, 'B+': 3, 'B': 2, 'C': 1 };
@@ -150,6 +169,42 @@ function Home() {
         >
           <Icons.Shuffle size={15} />
         </button>
+
+        <div className="flex items-center gap-0.5 ml-2 p-0.5 bg-surface rounded-lg">
+          <button
+            onClick={() => setViewType('list')}
+            className={`p-1.5 rounded-md transition-all ${
+              viewType === 'list'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+            title="列表视图"
+          >
+            <Icons.ListVideo size={14} />
+          </button>
+          <button
+            onClick={() => setViewType('grid')}
+            className={`p-1.5 rounded-md transition-all ${
+              viewType === 'grid'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+            title="网格视图"
+          >
+            <Icons.Image size={14} />
+          </button>
+          <button
+            onClick={() => setViewType('gallery')}
+            className={`p-1.5 rounded-md transition-all ${
+              viewType === 'gallery'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+            title="画廊视图"
+          >
+            <Icons.Film size={14} />
+          </button>
+        </div>
       </div>
 
       {filteredItems.length === 0 ? (
@@ -158,47 +213,42 @@ function Home() {
         </div>
       ) : (
         <>
-          <div className={`grid gap-x-3 gap-y-5 ${
-            gridColumns === 2 ? 'grid-cols-2' :
-            gridColumns === 3 ? 'grid-cols-3' :
-            'grid-cols-4'
-          }`}>
-            {pageData.map(item => {
-              return (
+          {viewType === 'list' && (
+            <div className={`grid gap-2 ${
+              gridColumns === 1 ? 'grid-cols-1' :
+              gridColumns === 2 ? 'grid-cols-2' :
+              gridColumns === 3 ? 'grid-cols-3' :
+              gridColumns === 4 ? 'grid-cols-4' :
+              gridColumns === 5 ? 'grid-cols-5' :
+              'grid-cols-6'
+            }`}>
+              {pageData.map(item => (
                 <Link
                   key={item.id}
                   to={`/media/${item.id}`}
-                  className="group block"
+                  className="group flex items-center gap-3 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-colors"
                 >
-                  <div className="aspect-[2/3] w-full overflow-hidden relative bg-surface-hover rounded-2xl shadow-card">
+                  <div className="w-12 h-16 flex-shrink-0 overflow-hidden rounded-lg bg-surface-hover">
                     <img
                       src={getImageUrl(item.posterPath)}
                       alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                      className="w-full h-full object-cover"
                       loading="lazy"
                     />
-                    <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent rounded-b-2xl" />
-                    <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/20 backdrop-blur-sm text-white">
-                        {TYPE_LABELS[item.mediaType]}
-                      </span>
-                      {item.grade && (
-                        <span className="text-[11px] font-bold text-accent bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
-                          {item.grade}
-                        </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-sm text-text-primary truncate" title={item.title}>
+                        {item.title}
+                      </h3>
+                      {item.favorite && (
+                        <Icons.Heart size={12} className="fill-red text-red flex-shrink-0" />
                       )}
                     </div>
-                    {item.favorite && (
-                      <div className="absolute top-2.5 right-2.5">
-                        <Icons.Heart size={13} className="fill-red text-red drop-shadow-sm" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="pt-2 px-0.5 space-y-1">
-                    <h3 className="font-medium text-sm text-text-primary leading-snug line-clamp-1" title={item.title}>
-                      {item.title}
-                    </h3>
-                    <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    <div className="flex items-center gap-2 mt-1 text-xs text-text-secondary">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-accent/10 text-accent">
+                        {TYPE_LABELS[item.mediaType]}
+                      </span>
                       {item.episodeNumber && (
                         <span className="text-text-tertiary">
                           {item.episodeNumber.includes('E') || item.episodeNumber.includes('第')
@@ -207,17 +257,142 @@ function Home() {
                         </span>
                       )}
                       {item.releaseYear && item.releaseYear !== 'N/A' && (
-                        <span className="text-text-tertiary">· {item.releaseYear}</span>
+                        <span className="text-text-tertiary">{item.releaseYear}</span>
                       )}
-                      {item.characterName && (
-                        <span className="text-text-tertiary truncate">· {item.characterName}</span>
+                      {item.grade && (
+                        <span className="text-[10px] font-bold text-accent">{item.grade}</span>
                       )}
                     </div>
                   </div>
                 </Link>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {viewType === 'grid' && (
+            <div className={`grid gap-x-2 sm:gap-x-3 gap-y-4 sm:gap-y-5 ${
+              gridColumns === 1 ? 'grid-cols-1' :
+              gridColumns === 2 ? 'grid-cols-2' :
+              gridColumns === 3 ? 'grid-cols-3' :
+              gridColumns === 4 ? 'grid-cols-4' :
+              gridColumns === 5 ? 'grid-cols-5' :
+              'grid-cols-6'
+            }`}>
+              {pageData.map(item => {
+                return (
+                  <Link
+                    key={item.id}
+                    to={`/media/${item.id}`}
+                    className="group block"
+                  >
+                    <div className="aspect-[2/3] w-full overflow-hidden relative bg-surface-hover rounded-2xl shadow-card">
+                      <img
+                        src={getImageUrl(item.posterPath)}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent rounded-b-2xl" />
+                      <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/20 backdrop-blur-sm text-white">
+                          {TYPE_LABELS[item.mediaType]}
+                        </span>
+                        {item.grade && (
+                          <span className="text-[11px] font-bold text-accent bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
+                            {item.grade}
+                          </span>
+                        )}
+                      </div>
+                      {item.favorite && (
+                        <div className="absolute top-2.5 right-2.5">
+                          <Icons.Heart size={13} className="fill-red text-red drop-shadow-sm" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="pt-2 px-0.5 space-y-1">
+                      <h3 className="font-medium text-sm text-text-primary leading-snug line-clamp-1" title={item.title}>
+                        {item.title}
+                      </h3>
+                      <div className="flex items-center gap-2 text-xs text-text-secondary">
+                        {item.episodeNumber && (
+                          <span className="text-text-tertiary">
+                            {item.episodeNumber.includes('E') || item.episodeNumber.includes('第')
+                              ? item.episodeNumber
+                              : `第${item.episodeNumber}集`}
+                          </span>
+                        )}
+                        {item.releaseYear && item.releaseYear !== 'N/A' && (
+                          <span className="text-text-tertiary">· {item.releaseYear}</span>
+                        )}
+                        {item.characterName && (
+                          <span className="text-text-tertiary truncate">· {item.characterName}</span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {viewType === 'gallery' && (
+            <div className={`grid gap-3 sm:gap-4 ${
+              gridColumns === 1 ? 'grid-cols-1' :
+              gridColumns === 2 ? 'grid-cols-2' :
+              gridColumns === 3 ? 'grid-cols-3' :
+              gridColumns === 4 ? 'grid-cols-4' :
+              gridColumns === 5 ? 'grid-cols-5' :
+              'grid-cols-6'
+            }`}>
+              {pageData.map(item => (
+                <Link
+                  key={item.id}
+                  to={`/media/${item.id}`}
+                  className="group relative aspect-video overflow-hidden rounded-2xl shadow-card"
+                >
+                  <img
+                    src={getImageUrl(item.backdropPath || item.posterPath)}
+                    alt={item.title}
+                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/20 backdrop-blur-sm text-white">
+                        {TYPE_LABELS[item.mediaType]}
+                      </span>
+                      {item.grade && (
+                        <span className="text-[11px] font-bold text-accent bg-white/20 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
+                          {item.grade}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-semibold text-white text-base leading-snug line-clamp-1" title={item.title}>
+                      {item.title}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-white/70">
+                      {item.episodeNumber && (
+                        <span>
+                          {item.episodeNumber.includes('E') || item.episodeNumber.includes('第')
+                            ? item.episodeNumber
+                            : `第${item.episodeNumber}集`}
+                        </span>
+                      )}
+                      {item.releaseYear && item.releaseYear !== 'N/A' && (
+                        <span>· {item.releaseYear}</span>
+                      )}
+                    </div>
+                  </div>
+                  {item.favorite && (
+                    <div className="absolute top-3 right-3">
+                      <Icons.Heart size={16} className="fill-red text-red drop-shadow-md" />
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
 
           {hasNextPage && (
             <div ref={loadMoreRef} className="flex justify-center py-8">

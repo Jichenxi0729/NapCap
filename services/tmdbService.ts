@@ -86,6 +86,9 @@ export const getTrendingAll = async (): Promise<{ movies: TMDbMovieSummary[]; tv
 
 export const getImageUrl = (path: string | null, size: 'w500' | 'original' = 'w500') => {
   if (!path) return 'https://placehold.co/400x600/1e293b/FFF?text=No+Image';
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
   return size === 'original' ? `${IMAGE_ORIGINAL_URL}${path}` : `${IMAGE_BASE_URL}${path}`;
 };
 

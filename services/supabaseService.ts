@@ -272,7 +272,17 @@ export const addToCollection = async (item: SavedMedia): Promise<void> => {
       console.error('[Supabase] 添加数据失败:', error.message);
       throw error;
     }
-    clearCache();
+    
+    if (cachedCollection) {
+      const existsIndex = cachedCollection.findIndex(c => c.id === item.id);
+      if (existsIndex >= 0) {
+        cachedCollection[existsIndex] = { ...item };
+      } else {
+        cachedCollection = [item, ...cachedCollection];
+      }
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   } catch (error) {
     console.warn('[Supabase] 添加数据异常，回退到本地存储:', error);
     const local = getLocalCollection();
@@ -282,7 +292,16 @@ export const addToCollection = async (item: SavedMedia): Promise<void> => {
     } else {
       saveCollection([...local, item]);
     }
-    clearCache();
+    if (cachedCollection) {
+      const existsIndex = cachedCollection.findIndex(c => c.id === item.id);
+      if (existsIndex >= 0) {
+        cachedCollection[existsIndex] = { ...item };
+      } else {
+        cachedCollection = [item, ...cachedCollection];
+      }
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   }
 };
 
@@ -310,11 +329,20 @@ export const removeFromCollection = async (id: string): Promise<void> => {
       console.error('[Supabase] 删除数据失败:', error.message);
       throw error;
     }
-    clearCache();
+    
+    if (cachedCollection) {
+      cachedCollection = cachedCollection.filter(item => item.id !== id);
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   } catch (error) {
     console.warn('[Supabase] 删除数据异常，回退到本地存储:', error);
     saveCollection(getLocalCollection().filter(item => item.id !== id));
-    clearCache();
+    if (cachedCollection) {
+      cachedCollection = cachedCollection.filter(item => item.id !== id);
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   }
 };
 
@@ -394,14 +422,39 @@ export const importItems = async (items: SavedMedia[]): Promise<void> => {
         throw error;
       }
     }
-    clearCache();
+    
+    if (cachedCollection) {
+      const existingIds = new Set(cachedCollection.map(c => c.id));
+      items.forEach(item => {
+        const existsIndex = cachedCollection!.findIndex(c => c.id === item.id);
+        if (existsIndex >= 0) {
+          cachedCollection![existsIndex] = { ...item };
+        } else if (!existingIds.has(item.id)) {
+          cachedCollection = [item, ...cachedCollection!];
+        }
+      });
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   } catch (error) {
     console.warn('[Supabase] 批量导入异常，回退到本地存储:', error);
     const local = getLocalCollection();
     const existingIds = new Set(local.map(c => c.id));
     const newItems = items.filter(item => !existingIds.has(item.id));
     saveCollection([...local, ...newItems]);
-    clearCache();
+    if (cachedCollection) {
+      const cacheIds = new Set(cachedCollection.map(c => c.id));
+      items.forEach(item => {
+        const existsIndex = cachedCollection!.findIndex(c => c.id === item.id);
+        if (existsIndex >= 0) {
+          cachedCollection![existsIndex] = { ...item };
+        } else if (!cacheIds.has(item.id)) {
+          cachedCollection = [item, ...cachedCollection!];
+        }
+      });
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
   }
 };
 
@@ -461,7 +514,12 @@ export const removeDuplicates = async (): Promise<number> => {
       }
     }
 
-    clearCache();
+    if (cachedCollection) {
+      const duplicateSet = new Set(duplicates);
+      cachedCollection = cachedCollection.filter(item => !duplicateSet.has(item.id));
+      cacheTimestamp = Date.now();
+    }
+    eventBus.notify();
     console.log(`[Supabase] 成功删除 ${duplicates.length} 条重复数据`);
     return duplicates.length;
   } catch (error) {
