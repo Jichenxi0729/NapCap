@@ -57,3 +57,19 @@ export const importItems = (items: SavedMedia[]) => {
     saveCollection([...collection, ...newItems]);
   }
 };
+
+export const batchAddToCollection = (items: SavedMedia[]): string[] => {
+  const collection = getCollection();
+  const addedIds: string[] = [];
+  for (const item of items) {
+    const exists = collection.find(c => c.id === item.id);
+    if (!exists) {
+      collection.push(item);
+      addedIds.push(item.id);
+    }
+  }
+  if (addedIds.length > 0) {
+    saveCollection(collection);
+  }
+  return addedIds;
+};

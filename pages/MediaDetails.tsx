@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getMovieDetails, getTvDetails, getImageUrl, getTMDbUrl, searchMovies, searchTvShows } from '../services/tmdbService';
+import { getMovieDetails, getTvDetails, getTvEpisodeDetails, getImageUrl, getTMDbUrl, searchMovies, searchTvShows } from '../services/tmdbService';
 import { getItemById, addToCollection, removeFromCollection } from '../services';
-import { TMDbMovieDetail, TMDbTvDetail, SavedMedia, MediaType, TMDbMovieSummary, TMDbTvSummary } from '../types';
+import { TMDbMovieDetail, TMDbTvDetail, SavedMedia, MediaType, TMDbMovieSummary, TMDbTvSummary, TMDbEpisodeDetail } from '../types';
 import { Icons } from '../components/Icon';
 import StarRating from '../components/StarRating';
 
@@ -25,6 +25,8 @@ function MediaDetails() {
   const backdropParam = searchParams.get('backdrop') || '';
   const yearParam = searchParams.get('year') || '';
   const isManual = searchParams.get('manual') === 'true';
+  const seasonParam = searchParams.get('season');
+  const episodeParam = searchParams.get('episode');
 
   const [tmdbMovie, setTmdbMovie] = useState<TMDbMovieDetail | null>(null);
   const [tmdbTv, setTmdbTv] = useState<TMDbTvDetail | null>(null);
@@ -44,10 +46,14 @@ function MediaDetails() {
   const [formReview, setFormReview] = useState('');
   const [formDate, setFormDate] = useState('');
   const [formFavorite, setFormFavorite] = useState(false);
-  const [formMediaType, setFormMediaType] = useState<MediaType>('short_drama');
-  const [formTitle, setFormTitle] = useState('');
-  const [formPosterPath, setFormPosterPath] = useState('');
+  const [formMediaType, setFormMediaType] = useState<MediaType>(mediaTypeParam || 'short_drama');
+  const [formTitle, setFormTitle] = useState(titleParam);
+  const [formPosterPath, setFormPosterPath] = useState(posterParam);
   const [formBackdropPath, setFormBackdropPath] = useState('');
+  const [formOverview, setFormOverview] = useState('');
+  const [formGenres, setFormGenres] = useState('');
+  const [formEpisodeOverview, setFormEpisodeOverview] = useState('');
+  const [formSeasonNumber, setFormSeasonNumber] = useState<number | undefined>(undefined);
 
   const [showTmdbUpdate, setShowTmdbUpdate] = useState(false);
   const [tmdbSearchQuery, setTmdbSearchQuery] = useState('');
@@ -58,11 +64,14 @@ function MediaDetails() {
   const mediaType: MediaType = savedItem?.mediaType || mediaTypeParam || formMediaType || 'short_drama';
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
         if (!isNew && id) {
           const item = await getItemById(id);
+          if (cancelled) return;
+
           if (item) {
             setSavedItem(item);
             setFormTitle(item.title);
@@ -81,38 +90,47 @@ function MediaDetails() {
             setFormMediaType(item.mediaType);
             setFormPosterPath(item.posterPath || '');
             setFormBackdropPath(item.backdropPath || '');
-          }
-          const numId = item?.tmdbId || parseInt(id);
-          if (numId && !isNaN(numId)) {
-            try {
-              const fetchAsTv = item?.mediaType !== 'movie';
-              if (fetchAsTv) {
-                const tv = await getTvDetails(numId);
-                setTmdbTv(tv);
-              } else {
-                const movie = await getMovieDetails(numId);
-                setTmdbMovie(movie);
-              }
-            } catch {
-            }
+            setFormOverview(item.overview || '');
+            setFormGenres((item.genres || []).join('、'));
+            setFormEpisodeOverview(item.episodeOverview || '');
+            setFormSeasonNumber(item.seasonNumber);
           }
         } else if (isNew && tmdbId) {
           const numId = parseInt(tmdbId);
           if (mediaTypeParam === 'tv') {
             const tv = await getTvDetails(numId);
-            setTmdbTv(tv);
+            if (!cancelled) setTmdbTv(tv);
+            if (!cancelled && seasonParam && episodeParam) {
+              const seasonNum = parseInt(seasonParam);
+              const episodeNum = parseInt(episodeParam);
+              try {
+                const epDetail = await getTvEpisodeDetails(numId, seasonNum, episodeNum);
+                if (!cancelled) {
+                  setFormEpisodeOverview(epDetail.overview || '');
+                  setFormSeasonNumber(seasonNum);
+                  setFormEpisode(`E${episodeNum}`);
+                  if (tv.seasons) {
+                    const matchedSeason = tv.seasons.find(s => s.season_number === seasonNum);
+                    if (matchedSeason?.poster_path) {
+                      setFormPosterPath(matchedSeason.poster_path);
+                    }
+                  }
+                }
+              } catch {}
+            }
           } else {
             const movie = await getMovieDetails(numId);
-            setTmdbMovie(movie);
+            if (!cancelled) setTmdbMovie(movie);
           }
         }
       } catch {
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
-  }, [id, isNew, tmdbId, mediaTypeParam]);
+    return () => { cancelled = true; };
+  }, [id, isNew, tmdbId, mediaTypeParam, seasonParam, episodeParam]);
 
   const getDisplayTitle = () => {
     if (savedItem) return savedItem.title;
@@ -131,10 +149,10 @@ function MediaDetails() {
   };
 
   const getDisplayBackdrop = () => {
-    if (savedItem?.backdropPath) return getImageUrl(savedItem.backdropPath, 'original');
-    if (tmdbMovie?.backdrop_path) return getImageUrl(tmdbMovie.backdrop_path, 'original');
-    if (tmdbTv?.backdrop_path) return getImageUrl(tmdbTv.backdrop_path, 'original');
-    if (backdropParam) return getImageUrl(decodeURIComponent(backdropParam), 'original');
+    if (savedItem?.backdropPath) return getImageUrl(savedItem.backdropPath, 'w1280');
+    if (tmdbMovie?.backdrop_path) return getImageUrl(tmdbMovie.backdrop_path, 'w1280');
+    if (tmdbTv?.backdrop_path) return getImageUrl(tmdbTv.backdrop_path, 'w1280');
+    if (backdropParam) return getImageUrl(decodeURIComponent(backdropParam), 'w1280');
     const posterUrl = getDisplayPoster();
     if (posterUrl && !posterUrl.includes('null')) return posterUrl;
     return null;
@@ -177,8 +195,10 @@ function MediaDetails() {
       userReview: formReview,
       watchedDate: formDate,
       favorite: formFavorite,
-      genres: tmdbMovie?.genres.map(g => g.name) || tmdbTv?.genres.map(g => g.name) || [],
-      overview: tmdbMovie?.overview || tmdbTv?.overview || '',
+      genres: formGenres ? formGenres.split(/[,，、]/).map(g => g.trim()).filter(Boolean) : (tmdbMovie?.genres.map(g => g.name) || tmdbTv?.genres.map(g => g.name) || savedItem?.genres || []),
+      overview: formOverview || tmdbMovie?.overview || tmdbTv?.overview || savedItem?.overview || '',
+      seasonNumber: formSeasonNumber,
+      episodeOverview: formEpisodeOverview,
     };
 
     addToCollection(baseData);
@@ -317,6 +337,10 @@ function MediaDetails() {
                     setFormMediaType(savedItem.mediaType);
                     setFormPosterPath(savedItem.posterPath || '');
                     setFormBackdropPath(savedItem.backdropPath || '');
+                    setFormOverview(savedItem.overview || '');
+                    setFormGenres((savedItem.genres || []).join('、'));
+                    setFormEpisodeOverview(savedItem.episodeOverview || '');
+                    setFormSeasonNumber(savedItem.seasonNumber);
                     setIsEditing(true);
                   }}
                   className="w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm flex items-center justify-center hover:bg-black/40 transition-colors active:scale-90"
@@ -376,11 +400,15 @@ function MediaDetails() {
                   setFormDate(savedItem.watchedDate);
                   setFormFavorite(savedItem.favorite);
                   setFormMediaType(savedItem.mediaType);
-                  setFormPosterPath(savedItem.posterPath || '');
-                  setFormBackdropPath(savedItem.backdropPath || '');
-                  setIsEditing(true);
-                }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-bg transition-colors active:scale-95"
+                    setFormPosterPath(savedItem.posterPath || '');
+                    setFormBackdropPath(savedItem.backdropPath || '');
+                    setFormOverview(savedItem.overview || '');
+                    setFormGenres((savedItem.genres || []).join('、'));
+                    setFormEpisodeOverview(savedItem.episodeOverview || '');
+                    setFormSeasonNumber(savedItem.seasonNumber);
+                    setIsEditing(true);
+                  }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-bg transition-colors active:scale-95"
               >
                 <Icons.Edit size={14} className="text-text-secondary" />
               </button>
@@ -662,6 +690,28 @@ function MediaDetails() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-[11px] text-text-secondary mb-1.5">剧情简介</label>
+              <textarea
+                rows={3}
+                placeholder="剧情简介..."
+                value={formOverview}
+                onChange={(e) => setFormOverview(e.target.value)}
+                className="w-full bg-bg border border-divider/40 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-text-secondary mb-1.5">类型标签（逗号分隔）</label>
+              <input
+                type="text"
+                placeholder="如：谍战、悬疑、动作"
+                value={formGenres}
+                onChange={(e) => setFormGenres(e.target.value)}
+                className="w-full h-9 bg-bg border border-divider/40 rounded-xl px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] text-text-secondary mb-1.5">评级</label>
@@ -747,6 +797,20 @@ function MediaDetails() {
                     "{(tmdbMovie?.tagline || tmdbTv?.tagline)}"
                   </p>
                 )}
+              </div>
+            )}
+
+            {savedItem?.episodeOverview && (
+              <div className="bg-surface rounded-2xl p-5 shadow-card border border-divider/20">
+                <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-2 font-medium">分集剧情</p>
+                {savedItem.episodeName ? (
+                  <p className="text-sm font-medium text-text-primary mb-1.5">{savedItem.episodeName}</p>
+                ) : savedItem.episodeNumber ? (
+                  <p className="text-sm font-medium text-text-primary mb-1.5">第{savedItem.episodeNumber.replace(/[^0-9]/g, '')}集</p>
+                ) : null}
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  {savedItem.episodeOverview}
+                </p>
               </div>
             )}
           </div>

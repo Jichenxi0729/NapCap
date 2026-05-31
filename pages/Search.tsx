@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchMulti, getImageUrl, getTrendingAll } from '../services/tmdbService';
-import { TMDbMovieSummary, TMDbTvSummary, MediaType } from '../types';
-import { getItemsByTmdbId } from '../services/storageService';
+import { searchMulti, getImageUrl, getTrendingAll, getTvDetails, getTvSeasonDetails } from '../services/tmdbService';
+import { TMDbMovieSummary, TMDbTvSummary, MediaType, TMDbTvDetail, TMDbSeasonSummary, TMDbEpisodeSummary } from '../types';
+import { getItemsByTmdbId, batchAddToCollection } from '../services/storageService';
 import { Icons } from '../components/Icon';
 
 function SearchPage() {
@@ -18,6 +18,14 @@ function SearchPage() {
 
   const [manualTitle, setManualTitle] = useState('');
   const [manualType, setManualType] = useState<MediaType>('short_drama');
+
+  const [pickerTv, setPickerTv] = useState<{ id: number; name: string; poster: string | null; backdrop: string | null; year: string } | null>(null);
+  const [pickerSeasons, setPickerSeasons] = useState<TMDbSeasonSummary[]>([]);
+  const [pickerSeason, setPickerSeason] = useState<TMDbSeasonSummary | null>(null);
+  const [pickerEpisodes, setPickerEpisodes] = useState<TMDbEpisodeSummary[]>([]);
+  const [selectedEpisodes, setSelectedEpisodes] = useState<Set<number>>(new Set());
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerStep, setPickerStep] = useState<'season' | 'episode'>('season');
 
   useEffect(() => {
     getTrendingAll().then(({ movies, tvShows }) => {
@@ -47,21 +55,124 @@ function SearchPage() {
     navigate(`/media/new?tmdbId=${tmdbId}&type=${mediaType}&title=${encodeURIComponent(title)}&poster=${encodeURIComponent(posterPath || '')}&backdrop=${encodeURIComponent(backdropPath || '')}&year=${releaseYear}`);
   };
 
+  const handleTvClick = async (tv: TMDbTvSummary) => {
+    const tvInfo = {
+      id: tv.id,
+      name: tv.name,
+      poster: tv.poster_path,
+      backdrop: tv.poster_path,
+      year: tv.first_air_date ? tv.first_air_date.split('-')[0] : 'N/A',
+    };
+    setPickerTv(tvInfo);
+    setPickerLoading(true);
+    setPickerStep('season');
+    setPickerSeason(null);
+    setPickerEpisodes([]);
+    try {
+      const details = await getTvDetails(tv.id);
+      const seasons = (details.seasons || []).filter(s => s.season_number > 0);
+      setPickerSeasons(seasons);
+      if (seasons.length === 1) {
+        await loadEpisodes(tv.id, seasons[0]);
+      }
+    } catch {
+      setPickerSeasons([]);
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const loadEpisodes = async (tvId: number, season: TMDbSeasonSummary) => {
+    setPickerSeason(season);
+    setPickerStep('episode');
+    setSelectedEpisodes(new Set());
+    setPickerLoading(true);
+    try {
+      const detail = await getTvSeasonDetails(tvId, season.season_number);
+      setPickerEpisodes(detail.episodes || []);
+    } catch {
+      setPickerEpisodes([]);
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const toggleEpisode = (epNum: number) => {
+    setSelectedEpisodes(prev => {
+      const next = new Set(prev);
+      if (next.has(epNum)) {
+        next.delete(epNum);
+      } else {
+        next.add(epNum);
+      }
+      return next;
+    });
+  };
+
+  const handleConfirmEpisodes = () => {
+    if (!pickerTv || !pickerSeason || selectedEpisodes.size === 0) return;
+    const title = pickerSeasons.length > 1
+      ? `${pickerTv.name} 第${pickerSeason.season_number}季`
+      : pickerTv.name;
+    const poster = pickerSeason.poster_path || pickerTv.poster;
+    const items = Array.from(selectedEpisodes).sort((a, b) => a - b).map(epNum => {
+      const ep = pickerEpisodes.find(e => e.episode_number === epNum);
+      return {
+        id: crypto.randomUUID(),
+        tmdbId: pickerTv.id,
+        mediaType: 'tv' as MediaType,
+        title,
+        posterPath: poster,
+        backdropPath: pickerTv.backdrop,
+        releaseYear: pickerTv.year,
+        addedAt: Date.now(),
+        episodeNumber: `E${epNum}`,
+        characterName: '',
+        identity: '',
+        scene: '',
+        appearanceTime: '',
+        behavior: '',
+        outfit: '',
+        posture: '',
+        grade: '',
+        userReview: '',
+        watchedDate: '',
+        favorite: false,
+        genres: [],
+        overview: '',
+        seasonNumber: pickerSeason.season_number,
+        episodeOverview: ep?.overview || '',
+        episodeName: ep?.name || '',
+      };
+    });
+    batchAddToCollection(items);
+    navigate(`/media/${items[0].id}`);
+    closePicker();
+  };
+
+  const closePicker = () => {
+    setPickerTv(null);
+    setPickerSeasons([]);
+    setPickerSeason(null);
+    setPickerEpisodes([]);
+    setSelectedEpisodes(new Set());
+  };
+
   const handleManualAdd = () => {
     if (!manualTitle.trim()) return;
     navigate(`/media/new?manual=true&title=${encodeURIComponent(manualTitle)}&type=${manualType}`);
   };
 
   const ResultCard = ({
-    id, title, poster, year, vote, mediaType,
+    id, title, poster, year, vote, mediaType, isTv, tvData,
   }: {
-    id: number; title: string; poster: string | null; year: string; vote: number; mediaType: MediaType;
+    id: number; title: string; poster: string | null; year: string; vote: number; mediaType: MediaType; isTv?: boolean; tvData?: TMDbTvSummary;
   }) => {
     const existingItems = getItemsByTmdbId(id);
     const hasItems = existingItems.length > 0;
     return (
       <button
-        onClick={() => handleSelect(id, mediaType, title, poster, null, year)}
+        onClick={() => isTv && tvData ? handleTvClick(tvData) : handleSelect(id, mediaType, title, poster, null, year)}
         className="flex bg-surface rounded-2xl overflow-hidden shadow-card hover:shadow-card-hover transition-all duration-200 text-left w-full border border-divider/30"
       >
         <img src={getImageUrl(poster)} alt={title} className="w-20 h-28 object-cover flex-shrink-0 bg-surface-hover" />
@@ -179,6 +290,8 @@ function SearchPage() {
                 year={tv.first_air_date ? tv.first_air_date.split('-')[0] : 'N/A'}
                 vote={tv.vote_average}
                 mediaType="tv"
+                isTv
+                tvData={tv}
               />
             ))}
           </div>
@@ -225,6 +338,8 @@ function SearchPage() {
                     year={tv.first_air_date ? tv.first_air_date.split('-')[0] : 'N/A'}
                     vote={tv.vote_average}
                     mediaType="tv"
+                    isTv
+                    tvData={tv}
                   />
                 ))}
               </div>
@@ -252,6 +367,121 @@ function SearchPage() {
             </div>
           )}
         </>
+      )}
+
+      {pickerTv && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closePicker}>
+          <div className="bg-surface rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-divider/40">
+              <div>
+                <h2 className="text-base font-bold text-text-primary">
+                  {pickerStep === 'season' ? '选择季' : `选择集 - ${pickerSeason?.name || ''}`}
+                </h2>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {pickerTv.name}
+                  {pickerStep === 'episode' && selectedEpisodes.size > 0 && ` · 已选 ${selectedEpisodes.size} 集`}
+                </p>
+              </div>
+              <button onClick={closePicker} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-bg transition-colors">
+                <Icons.Close size={16} className="text-text-secondary" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              {pickerLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : pickerStep === 'season' ? (
+                pickerSeasons.length > 0 ? (
+                  <div className="space-y-2">
+                    {pickerSeasons.map(season => (
+                      <button
+                        key={season.id}
+                        onClick={() => loadEpisodes(pickerTv.id, season)}
+                        className="w-full flex gap-3 p-2.5 rounded-xl bg-bg hover:bg-accent/5 transition-colors text-left"
+                      >
+                        <img
+                          src={getImageUrl(season.poster_path)}
+                          alt={season.name}
+                          className="w-10 h-[60px] object-cover rounded-lg flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text-primary">{season.name}</p>
+                          <p className="text-[11px] text-text-tertiary mt-0.5">{season.episode_count} 集</p>
+                          {season.overview && (
+                            <p className="text-[11px] text-text-tertiary mt-1 line-clamp-2">{season.overview}</p>
+                          )}
+                        </div>
+                        <Icons.ChevronRight size={16} className="self-center text-text-tertiary flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-text-secondary text-center py-8">暂无季数据</p>
+                )
+              ) : (
+                pickerEpisodes.length > 0 ? (
+                  <div className="space-y-2">
+                    {pickerEpisodes.map(ep => {
+                      const isSelected = selectedEpisodes.has(ep.episode_number);
+                      return (
+                        <button
+                          key={ep.id}
+                          onClick={() => toggleEpisode(ep.episode_number)}
+                          className={`w-full flex gap-3 p-2.5 rounded-xl transition-colors text-left ${isSelected ? 'bg-accent/10 border border-accent/30' : 'bg-bg hover:bg-accent/5 border border-transparent'}`}
+                        >
+                          <div className={`w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center mt-0.5 border ${isSelected ? 'bg-accent border-accent' : 'border-divider/60'}`}>
+                            {isSelected && <Icons.Check size={12} className="text-white" />}
+                          </div>
+                          {ep.still_path ? (
+                            <img src={getImageUrl(ep.still_path)} alt={ep.name} className="w-16 h-10 object-cover rounded-lg flex-shrink-0" />
+                          ) : (
+                            <div className="w-16 h-10 rounded-lg bg-surface-hover flex items-center justify-center flex-shrink-0">
+                              <Icons.Tv size={14} className="text-text-tertiary" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-text-primary truncate">
+                              E{ep.episode_number} {ep.name}
+                            </p>
+                            {ep.overview && (
+                              <p className="text-[11px] text-text-tertiary mt-0.5 line-clamp-2">{ep.overview}</p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-text-secondary text-center py-8">暂无集数据</p>
+                )
+              )}
+            </div>
+
+            {pickerStep === 'episode' && (
+              <div className="px-4 pb-4 space-y-2">
+                {pickerSeasons.length > 1 && (
+                  <button
+                    onClick={() => { setPickerStep('season'); setPickerSeason(null); setPickerEpisodes([]); setSelectedEpisodes(new Set()); }}
+                    className="w-full h-9 rounded-xl bg-bg hover:bg-surface-hover text-text-secondary text-sm font-medium border border-divider/60 transition-colors"
+                  >
+                    返回选择季
+                  </button>
+                )}
+                <button
+                  onClick={handleConfirmEpisodes}
+                  disabled={selectedEpisodes.size === 0}
+                  className="w-full h-10 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {selectedEpisodes.size > 0
+                    ? `确认添加 ${selectedEpisodes.size} 集`
+                    : '请选择要添加的集'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

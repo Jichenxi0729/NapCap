@@ -11,4 +11,4 @@ export {
   removeDuplicates,
   debugCollection,
 } from './supabaseService';
-export { getItemsByTmdbId, saveCollection } from './storageService';
+export { getItemsByTmdbId, saveCollection, updateItem } from './storageService';

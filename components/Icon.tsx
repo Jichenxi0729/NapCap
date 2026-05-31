@@ -1,6 +1,6 @@
 import {
   Search, Plus, Star, Calendar, Trash2, Edit3,
-  Film, User, Heart, ChevronLeft, Filter, Menu, X, Check,
+  Film, User, Heart, ChevronLeft, ChevronRight, Filter, Menu, X, Check,
   Tv, Clapperboard, Upload, ExternalLink, ListVideo, Image,
   CloudUpload, CloudOff, CheckCircle, XCircle, Loader2,
   LogIn, LogOut, Mail, Lock, RefreshCw, Download, Settings, Shuffle
@@ -19,6 +19,7 @@ export const Icons = {
   User,
   Heart,
   Back: ChevronLeft,
+  ChevronRight,
   Filter,
   Menu,
   Close: X,

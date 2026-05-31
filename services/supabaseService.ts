@@ -170,6 +170,9 @@ export const getCollection = async (): Promise<SavedMedia[]> => {
       favorite: item.favorite || false,
       genres: item.genres || [],
       overview: item.overview,
+      seasonNumber: item.season_number ?? undefined,
+      episodeOverview: item.episode_overview || undefined,
+      episodeName: item.episode_name || undefined,
     }));
 
     cachedCollection = collection;
@@ -265,6 +268,9 @@ export const addToCollection = async (item: SavedMedia): Promise<void> => {
         favorite: item.favorite,
         genres: item.genres,
         overview: item.overview,
+        season_number: item.seasonNumber ?? null,
+        episode_overview: item.episodeOverview || null,
+        episode_name: item.episodeName || null,
         updated_at: new Date().toISOString(),
       });
 
@@ -347,6 +353,9 @@ export const removeFromCollection = async (id: string): Promise<void> => {
 };
 
 export const getItemById = async (id: string): Promise<SavedMedia | undefined> => {
+  if (cachedCollection) {
+    return cachedCollection.find(item => item.id === id);
+  }
   const collection = await getCollection();
   return collection.find(item => item.id === id);
 };
@@ -395,6 +404,9 @@ export const importItems = async (items: SavedMedia[]): Promise<void> => {
       favorite: item.favorite,
       genres: item.genres,
       overview: item.overview,
+      season_number: item.seasonNumber ?? null,
+      episode_overview: item.episodeOverview || null,
+      episode_name: item.episodeName || null,
       updated_at: new Date().toISOString(),
     }));
 

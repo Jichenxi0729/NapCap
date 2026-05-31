@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SavedMedia } from '../types';
-import { getCollection, getCachedCollection, clearCache, debugCollection, removeDuplicates } from '../services';
+import { getCollection, getCachedCollection, clearCache, debugCollection, removeDuplicates, addToCollection } from '../services';
+import { getTvDetails, getTvEpisodeDetails } from '../services/tmdbService';
 import { getCurrentUser, signOut } from '../services/authService';
 import { Icons } from '../components/Icon';
 import * as eventBus from '../services/eventBus';
@@ -22,6 +23,8 @@ function Profile() {
     return (saved as ViewType) || 'grid';
   });
   const [exporting, setExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -72,6 +75,83 @@ function Profile() {
       console.error('[导出] 失败:', e);
     }
     setExporting(false);
+  };
+
+  const handleRefreshTmdbInfo = async () => {
+    const tvItems = items.filter(i => i.mediaType === 'tv');
+    if (tvItems.length === 0) {
+      alert('没有电视剧数据');
+      return;
+    }
+
+    const needOverview = tvItems.filter(i => !i.overview && i.tmdbId);
+    const needEpisodeOverview = tvItems.filter(i => {
+      if (!i.tmdbId || !i.episodeNumber) return false;
+      if (i.episodeOverview && i.episodeName) return false;
+      const epNum = parseInt(i.episodeNumber.replace(/[^0-9]/g, ''));
+      return !isNaN(epNum) && epNum > 0;
+    });
+    const total = needOverview.length + needEpisodeOverview.length;
+
+    if (total === 0) {
+      alert('所有电视剧的剧情信息已完整，无需刷新');
+      return;
+    }
+
+    if (!confirm(`找到 ${tvItems.length} 部电视剧，其中 ${needOverview.length} 部缺剧情简介，${needEpisodeOverview.length} 条缺分集剧情。\n\n将从 TMDB 获取数据，是否继续？`)) {
+      return;
+    }
+
+    setRefreshing(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    const tvDetailsCache = new Map<number, any>();
+
+    const getTvDetailCached = async (tmdbId: number) => {
+      if (tvDetailsCache.has(tmdbId)) return tvDetailsCache.get(tmdbId);
+      const detail = await getTvDetails(tmdbId);
+      tvDetailsCache.set(tmdbId, detail);
+      return detail;
+    };
+
+    for (let i = 0; i < needOverview.length; i++) {
+      const item = needOverview[i];
+      setRefreshProgress(`(${i + 1}/${total}) 获取剧情简介: ${item.title}`);
+      try {
+        const detail = await getTvDetailCached(item.tmdbId);
+        await addToCollection({ ...item, overview: detail.overview || '' });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    for (let i = 0; i < needEpisodeOverview.length; i++) {
+      const item = needEpisodeOverview[i];
+      setRefreshProgress(`(${needOverview.length + i + 1}/${total}) 获取分集剧情: ${item.title} ${item.episodeNumber}`);
+      try {
+        const epNum = parseInt(item.episodeNumber.replace(/[^0-9]/g, ''));
+        const seasonNum = item.seasonNumber || 1;
+        if (!isNaN(epNum) && epNum > 0) {
+          const epDetail = await getTvEpisodeDetails(item.tmdbId, seasonNum, epNum);
+          await addToCollection({ ...item, seasonNumber: seasonNum, episodeOverview: epDetail.overview || '', episodeName: epDetail.name || '' });
+          successCount++;
+        }
+      } catch {
+        failCount++;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    tvDetailsCache.clear();
+    clearCache();
+    const collection = await getCollection();
+    setItems(collection);
+    setRefreshing(false);
+    setRefreshProgress('');
+    alert(`刷新完成！成功 ${successCount} 条${failCount > 0 ? `，失败 ${failCount} 条` : ''}`);
   };
 
   const typeCounts = {
@@ -235,6 +315,24 @@ function Profile() {
             </div>
             <span>清理重复</span>
             <span className="ml-auto text-text-tertiary text-xs">基于标题+集数+角色</span>
+          </button>
+
+          <button
+            onClick={handleRefreshTmdbInfo}
+            disabled={refreshing}
+            className="w-full flex items-center gap-3 h-11 px-4 rounded-xl bg-bg hover:bg-surface-hover text-text-primary text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            <div className="w-8 h-8 rounded-lg bg-purple/10 flex items-center justify-center flex-shrink-0">
+              {refreshing ? (
+                <Icons.Loading size={14} className="text-purple animate-spin" />
+              ) : (
+                <Icons.RefreshCw size={14} className="text-purple" />
+              )}
+            </div>
+            <span className="flex-1 text-left">
+              {refreshing ? refreshProgress || '刷新中...' : '刷新剧情信息'}
+            </span>
+            {!refreshing && <span className="text-text-tertiary text-xs">电视剧</span>}
           </button>
 
           <button

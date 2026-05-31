@@ -1,8 +1,9 @@
-import { TMDbMovieDetail, TMDbMovieSummary, TMDbTvSummary, TMDbTvDetail } from '../types';
+import { TMDbMovieDetail, TMDbMovieSummary, TMDbTvSummary, TMDbTvDetail, TMDbSeasonDetail, TMDbEpisodeDetail } from '../types';
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY || '4682c1bc83053424d2897bd268c953dd';
 const BASE_URL = 'https://api.tmdb.org/3';
 export const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+export const IMAGE_W1280_URL = 'https://image.tmdb.org/t/p/w1280';
 export const IMAGE_ORIGINAL_URL = 'https://image.tmdb.org/t/p/original';
 
 const fetchTMDb = async <T,>(endpoint: string, params: Record<string, string> = {}): Promise<T> => {
@@ -84,14 +85,23 @@ export const getTrendingAll = async (): Promise<{ movies: TMDbMovieSummary[]; tv
   }
 };
 
-export const getImageUrl = (path: string | null, size: 'w500' | 'original' = 'w500') => {
+export const getImageUrl = (path: string | null, size: 'w500' | 'w1280' | 'original' = 'w500') => {
   if (!path) return 'https://placehold.co/400x600/1e293b/FFF?text=No+Image';
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
+  if (size === 'w1280') return `${IMAGE_W1280_URL}${path}`;
   return size === 'original' ? `${IMAGE_ORIGINAL_URL}${path}` : `${IMAGE_BASE_URL}${path}`;
 };
 
 export const getTMDbUrl = (type: 'movie' | 'tv', id: number) => {
   return `https://www.themoviedb.org/${type}/${id}`;
+};
+
+export const getTvSeasonDetails = async (tvId: number, seasonNumber: number): Promise<TMDbSeasonDetail> => {
+  return fetchTMDb<TMDbSeasonDetail>(`/tv/${tvId}/season/${seasonNumber}`);
+};
+
+export const getTvEpisodeDetails = async (tvId: number, seasonNumber: number, episodeNumber: number): Promise<TMDbEpisodeDetail> => {
+  return fetchTMDb<TMDbEpisodeDetail>(`/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}`);
 };

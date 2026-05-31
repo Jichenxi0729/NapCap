@@ -45,10 +45,54 @@ export interface TMDbTvDetail {
   number_of_episodes: number;
   episode_run_time: number[];
   tagline: string;
+  seasons: TMDbSeasonSummary[];
   credits?: {
     cast: TMDbCast[];
     crew: TMDbCrew[];
   };
+}
+
+export interface TMDbSeasonSummary {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  season_number: number;
+  episode_count: number;
+  air_date: string;
+}
+
+export interface TMDbSeasonDetail {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  season_number: number;
+  episodes: TMDbEpisodeSummary[];
+  air_date: string;
+}
+
+export interface TMDbEpisodeSummary {
+  id: number;
+  name: string;
+  overview: string;
+  episode_number: number;
+  season_number: number;
+  still_path: string | null;
+  air_date: string;
+  vote_average: number;
+}
+
+export interface TMDbEpisodeDetail {
+  id: number;
+  name: string;
+  overview: string;
+  episode_number: number;
+  season_number: number;
+  still_path: string | null;
+  air_date: string;
+  vote_average: number;
+  runtime: number;
 }
 
 export interface TMDbCast {
@@ -87,6 +131,9 @@ export interface SavedMedia {
   favorite: boolean;
   genres: string[];
   overview: string;
+  seasonNumber?: number;
+  episodeOverview?: string;
+  episodeName?: string;
 }
 
 export type SortOption = 'date_added' | 'rating' | 'year' | 'title' | 'episode';

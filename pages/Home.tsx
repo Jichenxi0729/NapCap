@@ -18,7 +18,9 @@ const TYPE_LABELS: Record<MediaType, string> = {
 
 function Home() {
   const [items, setItems] = useState<SavedMedia[]>(() => getCachedCollection());
-  const [typeFilter, setTypeFilter] = useState<MediaType | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<MediaType | 'all'>(() => {
+    return (localStorage.getItem('homeTypeFilter') as MediaType | 'all') || 'all';
+  });
   const [gridColumns, setGridColumns] = useState(() => {
     const saved = localStorage.getItem('gridColumns');
     return saved ? parseInt(saved) : 2;
@@ -27,12 +29,44 @@ function Home() {
     const saved = localStorage.getItem('viewType');
     return (saved as ViewType) || 'grid';
   });
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterYear, setFilterYear] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('homeFilterYear') || '[]');
+    } catch { return []; }
+  });
+  const [filterGenres, setFilterGenres] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('homeFilterGenres') || '[]');
+    } catch { return []; }
+  });
+  const [filterGrade, setFilterGrade] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('homeFilterGrade') || '[]');
+    } catch { return []; }
+  });
   const { filterText, sortBy } = useSearchContext();
   const navigate = useNavigate();
 
   useEffect(() => {
     localStorage.setItem('viewType', viewType);
   }, [viewType]);
+
+  useEffect(() => {
+    localStorage.setItem('homeTypeFilter', typeFilter);
+  }, [typeFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('homeFilterYear', JSON.stringify(filterYear));
+  }, [filterYear]);
+
+  useEffect(() => {
+    localStorage.setItem('homeFilterGenres', JSON.stringify(filterGenres));
+  }, [filterGenres]);
+
+  useEffect(() => {
+    localStorage.setItem('homeFilterGrade', JSON.stringify(filterGrade));
+  }, [filterGrade]);
 
   useEffect(() => {
     const loadItems = async () => {
@@ -47,6 +81,17 @@ function Home() {
       setItems(getCachedCollection());
     });
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('homeTypeFilter');
+    if (saved) setTypeFilter(saved as MediaType | 'all');
+    const handler = () => {
+      const updated = localStorage.getItem('homeTypeFilter');
+      if (updated) setTypeFilter(updated as MediaType | 'all');
+    };
+    window.addEventListener('homeTypeFilterChange', handler);
+    return () => window.removeEventListener('homeTypeFilterChange', handler);
   }, []);
 
   useEffect(() => {
@@ -69,12 +114,36 @@ function Home() {
     return () => window.removeEventListener('viewTypeChange', handler);
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('homeScrollPos');
+    if (saved) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, parseInt(saved));
+      });
+    }
+    return () => {
+      localStorage.setItem('homeScrollPos', String(window.scrollY));
+    };
+  }, []);
+
   const gradeOrder: Record<string, number> = { 'S+': 7, 'S': 6, 'A+': 5, 'A': 4, 'B+': 3, 'B': 2, 'C': 1 };
+
+  const allYears = [...new Set(items.map(i => i.releaseYear).filter(y => y && y !== 'N/A'))].sort().reverse();
+  const allGenres = [...new Set(items.flatMap(i => i.genres || []).filter(Boolean))].sort();
+  const allGrades = Object.keys(gradeOrder).filter(g => items.some(i => i.grade === g));
+
+  const activeFilterCount = (filterYear.length > 0 ? 1 : 0) + (filterGenres.length > 0 ? 1 : 0) + (filterGrade.length > 0 ? 1 : 0);
 
   const filteredItems = items
     .filter(item => {
       if (typeFilter !== 'all' && item.mediaType !== typeFilter) return false;
       if (filterText && !item.title.toLowerCase().includes(filterText.toLowerCase())) return false;
+      if (filterYear.length > 0 && !filterYear.includes(item.releaseYear)) return false;
+      if (filterGenres.length > 0) {
+        const itemGenres = item.genres || [];
+        if (!filterGenres.some(g => itemGenres.includes(g))) return false;
+      }
+      if (filterGrade.length > 0 && !filterGrade.includes(item.grade)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -100,7 +169,7 @@ function Home() {
 
   useEffect(() => {
     resetPagination();
-  }, [typeFilter, filterText, sortBy]);
+  }, [typeFilter, filterText, sortBy, filterYear, filterGenres]);
 
   const counts = {
     all: items.length,
@@ -170,6 +239,23 @@ function Home() {
           <Icons.Shuffle size={15} />
         </button>
 
+        <button
+          onClick={() => setShowFilter(!showFilter)}
+          className={`relative p-2 rounded-full transition-colors active:scale-90 ${
+            showFilter || activeFilterCount > 0
+              ? 'bg-accent text-white'
+              : 'bg-surface hover:bg-surface-hover text-text-secondary hover:text-accent'
+          }`}
+          title="筛选"
+        >
+          <Icons.Filter size={15} />
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red text-white text-[9px] font-bold flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
         <div className="flex items-center gap-0.5 ml-2 p-0.5 bg-surface rounded-lg">
           <button
             onClick={() => setViewType('list')}
@@ -206,6 +292,109 @@ function Home() {
           </button>
         </div>
       </div>
+
+      {showFilter && (
+        <div className="bg-surface rounded-2xl p-4 space-y-4 shadow-card border border-divider/20">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary">筛选条件</h3>
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => { setFilterYear([]); setFilterGenres([]); setFilterGrade([]); }}
+                className="text-xs text-accent hover:text-accent-hover transition-colors"
+              >
+                恢复默认
+              </button>
+            )}
+          </div>
+
+          {allYears.length > 0 && (
+            <div>
+              <p className="text-[11px] text-text-tertiary mb-2">年份</p>
+              <div className="flex flex-wrap gap-1.5">
+                {allYears.map(year => (
+                  <button
+                    key={year}
+                    onClick={() => {
+                      setFilterYear(prev =>
+                        prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]
+                      );
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                      filterYear.includes(year)
+                        ? 'bg-accent text-white'
+                        : 'bg-bg text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {allGenres.length > 0 && (
+            <div>
+              <p className="text-[11px] text-text-tertiary mb-2">类型</p>
+              <div className="flex flex-wrap gap-1.5">
+                {allGenres.map(genre => (
+                  <button
+                    key={genre}
+                    onClick={() => {
+                      setFilterGenres(prev =>
+                        prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
+                      );
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                      filterGenres.includes(genre)
+                        ? 'bg-accent text-white'
+                        : 'bg-bg text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {allGrades.length > 0 && (
+            <div>
+              <p className="text-[11px] text-text-tertiary mb-2">等级</p>
+              <div className="flex flex-wrap gap-1.5">
+                {allGrades.map(grade => (
+                  <button
+                    key={grade}
+                    onClick={() => {
+                      setFilterGrade(prev =>
+                        prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]
+                      );
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                      filterGrade.includes(grade)
+                        ? 'bg-accent text-white'
+                        : 'bg-bg text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {grade}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1 border-t border-divider/20">
+            <span className="text-xs text-text-tertiary">
+              共 {filteredItems.length} 条结果
+            </span>
+            <button
+              onClick={() => setShowFilter(false)}
+              className="h-8 px-4 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-medium transition-colors"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      )}
 
       {filteredItems.length === 0 ? (
         <div className="text-center py-20">
